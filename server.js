@@ -14,9 +14,11 @@ app.use(
     origin: [
       "https://elraft-fashion-ql9x6lfqo-mohamed-shaliks-projects.vercel.app",
       "http://localhost:3000",
+      "http://localhost:5173",
     ],
   }),
 );
+app.options("*", cors());
 
 app.use(express.json());
 app.use("/api/auth", authRoutes);
@@ -33,6 +35,6 @@ mongoose
   .catch((err) => console.log(err));
 
 module.exports = app; 
-// app.listen(5000, () => {
-//   console.log("Server running on port 5000");
-// });
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
+});
