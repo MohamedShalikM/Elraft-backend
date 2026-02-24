@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
     phone: {
-      type: String, // ❌ FIXED: Changed from Number to String
+      type: String,
       required: true,
     },
     password: {
@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       minlength: 8,
     },
-    // ❌ REMOVED: confirmPassword - Never store in DB
+
     address: {
       type: String,
       required: true,
@@ -31,6 +31,6 @@ const userSchema = new mongoose.Schema(
     },
   },
   { timestamps: true },
-); // ✅ ADDED: createdAt/updatedAt timestamps
+);
 
 module.exports = mongoose.model("User", userSchema);
