@@ -5,20 +5,16 @@ const authRoutes = require("./routes/auth");
 
 const app = express();
 
-
-
-
 // middleware
 app.use(
   cors({
-    origin: [
-      process.env.FRONTEND_URL,
-      "http://localhost:5173",
-    ],
+    origin: "https://elraft-fashion.vercel.app",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
+// 👇 THIS LINE IS CRITICAL
 app.options("*", cors());
-
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 
