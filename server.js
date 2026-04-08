@@ -43,6 +43,22 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 app.use(express.json());
+
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    dbState: mongoose.connection.readyState,
+  });
+});
+
+app.use((req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ message: "Database unavailable" });
+  }
+
+  return next();
+});
+
 app.use("/api/auth", authRoutes);
 
 // test route
@@ -50,14 +66,35 @@ app.get("/", (req, res) => {
   res.send("Backend running");
 });
 
-// database connection
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.log(err));
-
-module.exports = app; 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+mongoose.connection.on("connected", () => {
+  console.log("MongoDB connected");
 });
+
+mongoose.connection.on("error", (error) => {
+  console.error("MongoDB connection error:", error.message);
+});
+
+mongoose.connection.on("disconnected", () => {
+  console.warn("MongoDB disconnected");
+});
+
+const startServer = async () => {
+  const PORT = process.env.PORT || 5000;
+
+  if (!process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is not configured");
+  }
+
+  await mongoose.connect(process.env.MONGODB_URI);
+
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+};
+
+startServer().catch((error) => {
+  console.error("Failed to start server:", error.message);
+  process.exit(1);
+});
+
+module.exports = app;
