@@ -10,27 +10,38 @@ const allowedOrigins = [
   "https://elraft-fashion.vercel.app",
   "http://localhost:5173",
   "http://localhost:3000",
+  ...(process.env.FRONTEND_URL || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 ];
+
+const isAllowedOrigin = (origin) => {
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Allow Vercel preview deployments for this frontend project.
+  return /^https:\/\/elraft-fashion(?:-[a-z0-9-]+)?\.vercel\.app$/i.test(origin);
+};
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin, like Postman or server-to-server calls.
+    if (!origin) return callback(null, true);
+
+    if (isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+};
+
 // middleware
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (Postman, mobile apps)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
-
-// 👇 THIS LINE IS CRITICAL
-app.options("*", cors());
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 
