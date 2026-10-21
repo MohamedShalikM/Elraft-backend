@@ -1,16 +1,16 @@
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const User = require("../models/User");
+import bcrypt from 'bcryptjs';
+import User from "../models/User.js"
+import { Router } from "express";
 
-const router = express.Router();
+const router = Router();
 
 // @route   POST api/auth/signup
 router.post("/signup", async (req, res) => {
-  const { name, email, phone, password, confirmPassword, address } = req.body;
+  const { name, email, password, confirmPassword} = req.body;
 
   try {
     // Validate required fields
-    if (!name || !email || !phone || !password || !address) {
+    if (!name || !email  || !password ) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -37,9 +37,7 @@ router.post("/signup", async (req, res) => {
     const user = new User({
       name,
       email,
-      phone,
       password: hashedPassword,
-      address,
     });
 
     await user.save();
@@ -73,8 +71,6 @@ router.post("/login", async (req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      phone: user.phone,
-      address: user.address,
     };
 
     res.json({
@@ -86,5 +82,23 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "Invalid credentials" });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-module.exports = router;
+    const userResponse = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+    };
+    res.json({ message: "Login successful", token: user._id, user: userResponse });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+export default router

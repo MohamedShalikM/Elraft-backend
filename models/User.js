@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
@@ -13,24 +13,20 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-    },
-    phone: {
-      type: String,
-      required: true,
+      sparse:true
     },
     password: {
       type: String,
-      required: true,
       minlength: 8,
     },
-
-    address: {
-      type: String,
-      required: true,
-      trim: true,
+    googleId:{
+        type:mongoose.Schema.Types.String,
+        unique:true,
+        sparse:true
     },
+    
   },
   { timestamps: true },
 );
 
-module.exports = mongoose.model("User", userSchema);
+export default mongoose.model("User", userSchema);
