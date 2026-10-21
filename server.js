@@ -7,9 +7,18 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20"
 import User from "./models/User.js";
 import session from "express-session";
 import dotenv from "dotenv";
+import { randomBytes } from "node:crypto";
 
 dotenv.config();
 const app = express();
+app.set("trust proxy", 1);
+const sessionSecret = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
+
+if (!process.env.SESSION_SECRET) {
+  console.warn(
+    "SESSION_SECRET is not configured. Set it in the deployment environment; sessions will not persist across restarts until then.",
+  );
+}
 
 const allowedOrigins = [
   "https://elraft-fashion.vercel.app",
@@ -51,9 +60,14 @@ app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: "auto",
+    },
   })
 );
 
@@ -107,43 +121,69 @@ mongoose.connection.on("disconnected", () => {
   console.warn("MongoDB disconnected");
 });
 
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.CALLBACK_URL
-  },
-  async function(accessToken, refreshToken, profile, done) {
-    try{
-        const user = await User.findOne({googleId:profile.id})
-        if(user){
-            return done(null,user);
-        }
-        const email = profile.emails?.[0]?.value;
-        const newUser = await User.create({
-            name:profile.displayName,
-            googleId:profile.id,
-            email
-        })
-        return done(null,newUser);
-  }catch(err){
-    return done(err,null);
-}}
-));
-
-app.get("/auth/google",passport.authenticate("google",{
-    scope:["profile","email"]
-}));
-
-app.get(
-  "/auth/google/cb",
-  passport.authenticate("google", {
-    failureRedirect: `${process.env.FRONTEND_URL || "http://localhost:5173"}/login`,
-  }),
-  (req, res) => {
-    // console.log("Google user:", req.user);
-    res.redirect(process.env.FRONTEND_URL || "http://localhost:5173");
-  }
+const googleCallbackUrl =
+  process.env.CALLBACK_URL ||
+  (process.env.RENDER_EXTERNAL_URL
+    ? `${process.env.RENDER_EXTERNAL_URL}/auth/google/cb`
+    : "http://localhost:5000/auth/google/cb");
+const googleOAuthEnabled = Boolean(
+  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
 );
+
+if (googleOAuthEnabled) {
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: googleCallbackUrl,
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          let user = await User.findOne({ googleId: profile.id });
+          if (!user) {
+            const email = profile.emails?.[0]?.value;
+            if (!email) return done(new Error("Google account did not provide an email"));
+
+            // Link to an existing email account when possible, avoiding duplicate-user conflicts.
+            user = await User.findOne({ email });
+            if (user) {
+              user.googleId = profile.id;
+              await user.save();
+            } else {
+              user = await User.create({
+                name: profile.displayName,
+                googleId: profile.id,
+                email,
+              });
+            }
+          }
+          return done(null, user);
+        } catch (error) {
+          return done(error);
+        }
+      },
+    ),
+  );
+
+  app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+  app.get(
+    "/auth/google/cb",
+    passport.authenticate("google", {
+      failureRedirect: `${process.env.FRONTEND_URL || "http://localhost:5173"}/login`,
+    }),
+    (req, res) => res.redirect(process.env.FRONTEND_URL || "http://localhost:5173"),
+  );
+} else {
+  console.warn(
+    "Google OAuth is disabled. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the deployment environment to enable it.",
+  );
+
+  const googleOAuthUnavailable = (req, res) =>
+    res.status(503).json({ message: "Google sign-in is not configured on this server" });
+  app.get("/auth/google", googleOAuthUnavailable);
+  app.get("/auth/google/cb", googleOAuthUnavailable);
+}
 
 app.get("/api/auth/me", (req, res) => {
   //  console.log("isAuthenticated:", req.isAuthenticated());
