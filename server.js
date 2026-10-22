@@ -136,14 +136,27 @@ mongoose.connection.on("disconnected", () => {
   console.warn("MongoDB disconnected");
 });
 
+const renderBackendUrl = process.env.RENDER_EXTERNAL_URL?.replace(/\/$/, "");
+const renderCallbackUrl = renderBackendUrl
+  ? `${renderBackendUrl}/auth/google/cb`
+  : null;
+const configuredCallbackIsLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(
+  process.env.CALLBACK_URL || "",
+);
 const googleCallbackUrl =
-  process.env.CALLBACK_URL ||
-  (process.env.RENDER_EXTERNAL_URL
-    ? `${process.env.RENDER_EXTERNAL_URL.replace(/\/$/, "")}/auth/google/cb`
-    : "http://localhost:5000/auth/google/cb");
-const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173")
+  (renderBackendUrl && configuredCallbackIsLocal
+    ? renderCallbackUrl
+    : process.env.CALLBACK_URL) ||
+  renderCallbackUrl ||
+  "http://localhost:5000/auth/google/cb";
+const configuredFrontendUrl = (process.env.FRONTEND_URL || "").split(",")[0].trim();
+const configuredFrontendIsLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(?:\/|$)/i.test(
+  configuredFrontendUrl,
+);
+const frontendUrl = (renderBackendUrl && configuredFrontendIsLocal
+  ? "https://elraft-fashion.vercel.app"
+  : configuredFrontendUrl || (renderBackendUrl ? "https://elraft-fashion.vercel.app" : "http://localhost:5173"))
   .split(",")[0]
-  .trim()
   .replace(/\/$/, "");
 const googleOAuthEnabled = Boolean(
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
