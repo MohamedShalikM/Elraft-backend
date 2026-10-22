@@ -6,7 +6,7 @@ const router = Router();
 
 // @route   POST api/auth/signup
 router.post("/signup", async (req, res) => {
-  const { name, email, password, confirmPassword} = req.body;
+    const { name, email, password, confirmPassword} = req.body;
 
   try {
     // Validate required fields
@@ -25,7 +25,8 @@ router.post("/signup", async (req, res) => {
     }
 
     // Check if user exists
-    const userExists = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -36,7 +37,7 @@ router.post("/signup", async (req, res) => {
     // Create user (matches your User model)
     const user = new User({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
     });
 
@@ -55,13 +56,13 @@ router.post("/login", async (req, res) => {
 
   try {
     // Check if user exists
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email?.trim().toLowerCase() });
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
     // Check password
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = user.password ? await bcrypt.compare(password, user.password) : false;
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -73,30 +74,12 @@ router.post("/login", async (req, res) => {
       email: user.email,
     };
 
-    res.json({
-      message: "Login successful",
-      user: userResponse,
+    req.logIn(user, (error) => {
+      if (error) return res.status(500).json({ message: "Could not start login session" });
+      res.json({ message: "Login successful", user: userResponse });
     });
   } catch (error) {
     console.error("Login error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-
-    const userResponse = {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-    };
-    res.json({ message: "Login successful", token: user._id, user: userResponse });
-  } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
 });

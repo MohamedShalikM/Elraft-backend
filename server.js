@@ -26,7 +26,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   ...(process.env.FRONTEND_URL || "")
     .split(",")
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/$/, ""))
     .filter(Boolean),
 ];
 
@@ -104,6 +104,21 @@ app.use((req, res, next) => {
 
 app.use("/api/auth", authRoutes);
 
+app.post("/api/auth/logout", (req, res, next) => {
+  req.logout((error) => {
+    if (error) return next(error);
+    req.session.destroy((sessionError) => {
+      if (sessionError) return next(sessionError);
+      res.clearCookie("connect.sid", {
+        httpOnly: true,
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+      res.json({ message: "Logged out" });
+    });
+  });
+});
+
 // test route
 app.get("/", (req, res) => {
   res.send("Backend running");
@@ -124,8 +139,12 @@ mongoose.connection.on("disconnected", () => {
 const googleCallbackUrl =
   process.env.CALLBACK_URL ||
   (process.env.RENDER_EXTERNAL_URL
-    ? `${process.env.RENDER_EXTERNAL_URL}/auth/google/cb`
+    ? `${process.env.RENDER_EXTERNAL_URL.replace(/\/$/, "")}/auth/google/cb`
     : "http://localhost:5000/auth/google/cb");
+const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")[0]
+  .trim()
+  .replace(/\/$/, "");
 const googleOAuthEnabled = Boolean(
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
 );
@@ -142,7 +161,7 @@ if (googleOAuthEnabled) {
         try {
           let user = await User.findOne({ googleId: profile.id });
           if (!user) {
-            const email = profile.emails?.[0]?.value;
+            const email = profile.emails?.[0]?.value?.trim().toLowerCase();
             if (!email) return done(new Error("Google account did not provide an email"));
 
             // Link to an existing email account when possible, avoiding duplicate-user conflicts.
@@ -170,9 +189,9 @@ if (googleOAuthEnabled) {
   app.get(
     "/auth/google/cb",
     passport.authenticate("google", {
-      failureRedirect: `${process.env.FRONTEND_URL || "http://localhost:5173"}/login`,
+      failureRedirect: `${frontendUrl}/login`,
     }),
-    (req, res) => res.redirect(process.env.FRONTEND_URL || "http://localhost:5173"),
+    (req, res) => res.redirect(frontendUrl),
   );
 } else {
   console.warn(
@@ -195,24 +214,8 @@ app.get("/api/auth/me", (req, res) => {
     });
   }
 
-  res.json({
-    user: req.user,
-  });
+  res.json({ user: { id: req.user.id, name: req.user.name, email: req.user.email } });
 });
-
-
-app.post("/login",(req,res,next)=>{
-    passport.authenticate("local",(err,user,info)=>{
-        if(err){return next (err)};
-        if(!user){
-            return res.status(401).json({message: info?.message || "Login Unsuccessful"})
-        }
-        req.logIn(user,(err)=>{
-            if(err){return next(err);}
-            return res.json({message:"Login Successful",user});
-        })
-    })(req,res,next);
-})
 
 
 const startServer = async () => {
